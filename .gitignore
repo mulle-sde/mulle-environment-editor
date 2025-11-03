@@ -1,0 +1,11 @@
+package-lock.json
+node_modules/
+dist/
+USAGE.md
+test-button-functionality.js
+test-compact.js
+test-complete.js
+test-electron.js
+test-menu-functionality.js
+test-reverted.js
+test-unified.js

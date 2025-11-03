@@ -1,0 +1,77 @@
+{
+  "name": "mulle-environment-editor",
+  "version": "1.0.0",
+  "description": "A visual editor for mulle-sde environment files",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron . --no-sandbox",
+    "dev": "electron . --no-sandbox --inspect",
+    "build": "electron-builder",
+    "build-linux": "electron-builder --linux",
+    "build-mac": "electron-builder --mac",
+    "build-win": "electron-builder --win",
+    "build-all": "electron-builder --linux --mac --win",
+    "dist": "electron-builder --publish=never",
+    "lint": "eslint .",
+    "lint-fix": "eslint . --fix",
+    "format": "npx eslint *.js --fix"
+  },
+  "keywords": [
+    "mulle-sde",
+    "environment",
+    "editor",
+    "electron"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^28.3.3",
+    "electron-builder": "^24.13.3",
+    "eslint": "^8.57.1"
+  },
+  "build": {
+    "appId": "com.mulle-kybernetik.environment-editor",
+    "productName": "Mulle Environment Editor",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "**/*",
+      "!dist/**/*",
+      "!node_modules/**/*"
+    ],
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "category": "Development"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "category": "public.app-category.developer-tools"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mulle Environment Editor</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="welcome-screen" class="screen active">
+        <div class="welcome-container">
+            <div class="logo">
+                <img src="icon.svg" alt="mulle logo" class="welcome-logo">
+                <h2>Mulle Environment Editor</h2>
+                <p>Visual editor for mulle-sde environment files</p>
+            </div>
+
+            <div class="actions">
+                <button id="open-project-btn" class="btn btn-primary">
+                    <span class="icon">📁</span>
+                    Open Project
+                </button>
+            </div>
+
+            <div id="recent-projects" class="recent-projects">
+                <h3>Recent Projects</h3>
+                <ul id="recent-list"></ul>
+            </div>
+        </div>
+    </div>
+
+    <div id="editor-screen" class="screen">
+        <div class="toolbar">
+            <div class="toolbar-left">
+                <button id="back-btn" class="btn btn-secondary">← Back</button>
+                <img class="toolbar-logo" src="icon.svg" alt="mulle logo">
+                <span id="project-title">Environment Editor</span>
+                <span id="project-path" class="project-path"></span>
+            </div>
+            <div class="toolbar-right">
+            </div>
+        </div>
+
+        <div class="editor-container">
+            <div class="main-content">
+                <div class="content-header">
+                    <h2>Environment Variables</h2>
+                    <div class="content-actions">
+                        <button id="add-variable-btn" class="btn btn-primary">➕ Add Variable</button>
+                        <button id="filter-btn" class="btn btn-secondary">🔍 Filter</button>
+                    </div>
+                </div>
+
+                <div id="variables-container" class="variables-container">
+                    <table id="variables-table" class="variables-table">
+                        <thead>
+                            <tr>
+                                <th>Key</th>
+                                <th>Scope</th>
+                                <th>Value</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="variables-tbody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div id="value-preview" class="value-preview">
+            <div class="preview-header">
+                <strong id="preview-key">Select a variable to preview</strong>
+                <span id="preview-scope" class="preview-scope-info"></span>
+            </div>
+            <div class="preview-content">
+                <div class="preview-section">
+                    <label>Raw Value:</label>
+                    <div id="preview-raw" class="preview-value"></div>
+                </div>
+                <div class="preview-section">
+                    <label>Evaluated Value:</label>
+                    <div id="preview-evaluated" class="preview-value"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="status-bar" class="status-bar">
+            <span id="status-text">Ready</span>
+            <span id="modified-indicator" class="modified-indicator" style="display: none;">● Modified</span>
+        </div>
+    </div>
+
+    <!-- Add Variable Modal -->
+    <div id="add-variable-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Add Environment Variable</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="add-variable-form">
+                    <div class="form-group">
+                        <label for="var-name">Variable Name:</label>
+                        <input type="text" id="var-name" required pattern="[A-Za-z_][A-Za-z0-9_]*">
+                    </div>
+                    <div class="form-group">
+                        <label for="var-value">Value:</label>
+                        <input type="text" id="var-value">
+                    </div>
+                    <div class="form-group">
+                        <label for="var-comment">Comment (optional):</label>
+                        <input type="text" id="var-comment">
+                    </div>
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="var-enabled" checked>
+                            Enabled
+                        </label>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" id="cancel-add-variable">Cancel</button>
+                <button type="submit" class="btn btn-primary" id="confirm-add-variable">Add Variable</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Scope Modal -->
+    <div id="add-scope-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Add Custom Scope</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="add-scope-form">
+                    <div class="form-group">
+                        <label for="scope-name">Scope Name:</label>
+                        <input type="text" id="scope-name" required pattern="[A-Za-z_][A-Za-z0-9_-]*">
+                        <small class="form-help">Use only letters, numbers, underscores and hyphens</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="scope-type">Scope Type:</label>
+                        <select id="scope-type" required>
+                            <option value="etc">Local (Editable)</option>
+                            <option value="share">Shared (Read-only)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="scope-priority">Priority (0-9999):</label>
+                        <input type="number" id="scope-priority" required min="0" max="9999" value="500">
+                        <small class="form-help">Lower numbers = higher priority. Built-in scopes: 5-2000</small>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" id="cancel-add-scope">Cancel</button>
+                <button type="submit" class="btn btn-primary" id="confirm-add-scope">Add Scope</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scope Manager Modal -->
+    <div id="scope-manager-modal" class="modal">
+        <div class="modal-content scope-manager-modal">
+            <div class="modal-header">
+                <h3>Manage Scopes</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="scope-manager-content">
+                    <div class="scope-selector-section">
+                        <h4>Select Scope for Variable</h4>
+                        <div id="scope-selector-list" class="scope-selector-list"></div>
+                    </div>
+                    <div class="scope-management-section">
+                        <h4>Loading Priority</h4>
+                        <p class="help-text">Drag to reorder custom scopes (higher priority first)</p>
+                        <ul id="modal-loading-order-list" class="loading-order-list"></ul>
+                        <button type="button" class="btn btn-small" id="add-scope-from-manager">➕ Add Custom Scope</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="renderer.js"></script>
+</body>
+</html>
