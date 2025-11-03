@@ -3,6 +3,8 @@ let currentEnvData = { etc: {}, share: {}, allVariables: [], loadingOrder: [] };
 let isModified = false;
 let selectedScopes = new Set(); // Track which scopes are selected for filtering
 let systemInfo = { os: null, hostname: null, username: null }; // System info for scope filtering
+let resortTimer = null; // Timer for delayed resort
+let pendingResort = false; // Flag to indicate a resort is pending
 
 
 // Built-in scopes from include-environment.sh (these cannot be deleted or reordered)
@@ -30,13 +32,10 @@ const BUILTIN_SCOPES = new Set([
 const welcomeScreen = document.getElementById('welcome-screen');
 const editorScreen = document.getElementById('editor-screen');
 const openProjectBtn = document.getElementById('open-project-btn');
-const saveBtn = document.getElementById('save-btn');
-const backBtn = document.getElementById('back-btn');
 const addVariableBtn = document.getElementById('add-variable-btn');
-const filterBtn = document.getElementById('filter-btn');
+const searchInput = document.getElementById('search-input');
 const projectPathElement = document.getElementById('project-path');
 const variablesTbody = document.getElementById('variables-tbody');
-const statusText = document.getElementById('status-text');
 const modifiedIndicator = document.getElementById('modified-indicator');
 
 // Preview elements
@@ -44,6 +43,9 @@ const previewKey = document.getElementById('preview-key');
 const previewScope = document.getElementById('preview-scope');
 const previewRaw = document.getElementById('preview-raw');
 const previewEvaluated = document.getElementById('preview-evaluated');
+const previewOS = document.getElementById('preview-os');
+const previewHostname = document.getElementById('preview-hostname');
+const previewUsername = document.getElementById('preview-username');
 
 // Modal elements
 const addVariableModal = document.getElementById('add-variable-modal');
@@ -56,19 +58,18 @@ const cancelAddVariable = document.getElementById('cancel-add-variable');
 
 const addScopeModal = document.getElementById('add-scope-modal');
 const scopeNameInput = document.getElementById('scope-name');
-const scopeTypeInput = document.getElementById('scope-type');
-const scopePriorityInput = document.getElementById('scope-priority');
 const confirmAddScope = document.getElementById('confirm-add-scope');
 const cancelAddScope = document.getElementById('cancel-add-scope');
 
 const scopeManagerModal = document.getElementById('scope-manager-modal');
-const scopeSelectorList = document.getElementById('scope-selector-list');
 const modalLoadingOrderList = document.getElementById('modal-loading-order-list');
 const addScopeFromManager = document.getElementById('add-scope-from-manager');
+const confirmScopeManager = document.getElementById('confirm-scope-manager');
+const cancelScopeManager = document.getElementById('cancel-scope-manager');
 
 const modalClose = document.querySelectorAll('.modal-close');
 
-let currentVariableForScopeChange = null;
+let currentVariableForScopeChange = null; // Will store {key, scope, scopeType} to identify the variable
 
 // Event listeners - route through menu events for consistency
 openProjectBtn.addEventListener('click', () => {
@@ -77,19 +78,23 @@ openProjectBtn.addEventListener('click', () => {
   window.electronAPI.sendMenuAction('menu-open-project');
 });
 
-backBtn.addEventListener('click', () => {
-  console.log('Back button clicked - routing through menu event');
-  window.electronAPI.sendMenuAction('menu-back');
-});
-
 addVariableBtn.addEventListener('click', () => {
   console.log('Add Variable button clicked - routing through menu event');
   window.electronAPI.sendMenuAction('menu-add-variable');
 });
 
-filterBtn.addEventListener('click', () => {
-  console.log('Filter button clicked - routing through menu event');
-  window.electronAPI.sendMenuAction('menu-toggle-filter');
+searchInput.addEventListener('input', () => {
+  // Reset resort timer on user activity
+  if (resortTimer) {
+    clearTimeout(resortTimer);
+    if (pendingResort) {
+      resortTimer = setTimeout(() => {
+        renderVariables(false);
+        pendingResort = false;
+      }, 3000);
+    }
+  }
+  renderVariables(pendingResort);
 });
 
 // Modal event listeners
@@ -98,8 +103,22 @@ cancelAddVariable.addEventListener('click', hideAddVariableModal);
 confirmAddScope.addEventListener('click', addScope);
 cancelAddScope.addEventListener('click', hideAddScopeModal);
 addScopeFromManager.addEventListener('click', () => {
+  showAddScopeModal(true); // Pass flag to indicate we're in scope manager
+});
+
+confirmScopeManager.addEventListener('click', () => {
+  // Apply pending scope selection if any
+  if (window.pendingScopeSelection && currentVariableForScopeChange !== null) {
+    changeVariableScopeByIdentity(currentVariableForScopeChange, window.pendingScopeSelection.scope, window.pendingScopeSelection.type);
+  } else {
+    hideScopeManagerModal();
+  }
+  window.pendingScopeSelection = null;
+});
+
+cancelScopeManager.addEventListener('click', () => {
+  window.pendingScopeSelection = null;
   hideScopeManagerModal();
-  showAddScopeModal();
 });
 
 modalClose.forEach(btn => {
@@ -115,6 +134,13 @@ modalClose.forEach(btn => {
 varNameInput.addEventListener('keypress', (e) => {
   if (e.key === 'Enter') {
     addVariable();
+  }
+});
+
+scopeNameInput.addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    addScope();
   }
 });
 
@@ -135,10 +161,7 @@ window.electronAPI.onMenuSaveAs(() => {
   showStatus('Save As not yet implemented', 'info');
 });
 
-window.electronAPI.onMenuBack(() => {
-  console.log('Menu event: Back');
-  showWelcomeScreen();
-});
+
 
 window.electronAPI.onMenuAddVariable(() => {
   console.log('Menu event: Add Variable');
@@ -157,14 +180,52 @@ window.electronAPI.onMenuAddScope(() => {
 });
 
 window.electronAPI.onMenuToggleFilter(() => {
-  console.log('Menu event: Toggle Filter');
-  toggleScopeFilter();
+  console.log('Menu event: Toggle Filter - focus search');
+  searchInput.focus();
 });
 
 window.electronAPI.onOpenRecentProject((event, projectPath) => {
   console.log('Menu event: Open Recent Project', projectPath);
   openProject(projectPath);
 });
+
+// Preview control event listeners
+previewOS.addEventListener('change', () => {
+  // Re-evaluate the current variable when preview settings change
+  const selectedRow = variablesTbody.querySelector('tr.selected');
+  if (selectedRow) {
+    const index = Array.from(variablesTbody.querySelectorAll('tr')).indexOf(selectedRow);
+    selectVariable(index);
+  }
+});
+
+previewHostname.addEventListener('input', debounce(() => {
+  const selectedRow = variablesTbody.querySelector('tr.selected');
+  if (selectedRow) {
+    const index = Array.from(variablesTbody.querySelectorAll('tr')).indexOf(selectedRow);
+    selectVariable(index);
+  }
+}, 500));
+
+previewUsername.addEventListener('input', debounce(() => {
+  const selectedRow = variablesTbody.querySelector('tr.selected');
+  if (selectedRow) {
+    const index = Array.from(variablesTbody.querySelectorAll('tr')).indexOf(selectedRow);
+    selectVariable(index);
+  }
+}, 500));
+
+function debounce(func, wait) {
+  let timeout;
+  return function executedFunction(...args) {
+    const later = () => {
+      clearTimeout(timeout);
+      func(...args);
+    };
+    clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
+  };
+}
 
 // Initialize
 async function init() {
@@ -183,6 +244,14 @@ async function loadSystemInfo() {
       hostname: hostname?.trim().toLowerCase(),
       username: username?.trim().toLowerCase()
     };
+    
+    // Set defaults in preview controls
+    if (previewHostname) {
+      previewHostname.placeholder = systemInfo.hostname || 'Current hostname';
+    }
+    if (previewUsername) {
+      previewUsername.placeholder = systemInfo.username || 'Current username';
+    }
     
     console.log('System info loaded:', systemInfo);
   } catch (error) {
@@ -243,6 +312,9 @@ async function openProject(projectPath) {
     if (result.success) {
       currentProjectPath = projectPath;
       currentEnvData = result.data;
+      
+      // Add hardcoded system scope variables at priority 0
+      addSystemScopeVariables();
 
       projectPathElement.textContent = projectPath;
       showEditorScreen();
@@ -263,11 +335,70 @@ async function openProject(projectPath) {
   }
 }
 
-function showWelcomeScreen() {
-  welcomeScreen.classList.add('active');
-  editorScreen.classList.remove('active');
-  isModified = false;
-  updateModifiedIndicator();
+function addSystemScopeVariables() {
+  // Create hardcoded system scope at priority 0 (highest priority)
+  const systemVariables = [
+    {
+      key: 'MULLE_HOSTNAME',
+      value: systemInfo.hostname || '',
+      scope: 'system',
+      scopeType: 'system',
+      priority: 0,
+      editable: false,
+      enabled: true,
+      comment: 'System hostname'
+    },
+    {
+      key: 'MULLE_USERNAME',
+      value: systemInfo.username || '',
+      scope: 'system',
+      scopeType: 'system',
+      priority: 0,
+      editable: false,
+      enabled: true,
+      comment: 'System username'
+    },
+    {
+      key: 'MULLE_UNAME',
+      value: systemInfo.os || '',
+      scope: 'system',
+      scopeType: 'system',
+      priority: 0,
+      editable: false,
+      enabled: true,
+      comment: 'System OS'
+    },
+    {
+      key: 'MULLE_VIRTUAL_ROOT',
+      value: currentProjectPath || '',
+      scope: 'system',
+      scopeType: 'system',
+      priority: 0,
+      editable: false,
+      enabled: true,
+      comment: 'Project path'
+    },
+    {
+      key: 'MULLE_VIRTUAL_ROOT_ID',
+      value: '11118481111',
+      scope: 'system',
+      scopeType: 'system',
+      priority: 0,
+      editable: false,
+      enabled: true,
+      comment: 'Virtual root ID'
+    }
+  ];
+  
+  // Prepend system variables to the unified list
+  currentEnvData.allVariables = [...systemVariables, ...currentEnvData.allVariables];
+  
+  // Add system scope to loading order at the beginning
+  currentEnvData.loadingOrder.unshift({
+    type: 'system',
+    scope: 'system',
+    priority: 0
+  });
 }
 
 function showEditorScreen() {
@@ -277,10 +408,18 @@ function showEditorScreen() {
 
 
 
-function renderVariables() {
+function renderVariables(skipSort = false) {
   variablesTbody.innerHTML = '';
 
   let variablesToShow = currentEnvData.allVariables;
+
+  // Apply search filter
+  const searchTerm = searchInput.value.trim().toLowerCase();
+  if (searchTerm) {
+    variablesToShow = variablesToShow.filter(variable => 
+      variable.key.toLowerCase().includes(searchTerm)
+    );
+  }
 
   // Apply scope filter if any scopes are selected
   if (selectedScopes.size > 0) {
@@ -290,20 +429,32 @@ function renderVariables() {
     });
   }
 
-  // Sort by priority first (ascending), then by key name
-  variablesToShow.sort((a, b) => {
-    if (a.priority !== b.priority) {
-      return a.priority - b.priority;
-    }
-    return a.key.localeCompare(b.key);
-  });
+  // Sort by priority first (ascending), then by key name (unless skipSort is true)
+  if (!skipSort) {
+    variablesToShow.sort((a, b) => {
+      if (a.priority !== b.priority) {
+        return a.priority - b.priority;
+      }
+      return a.key.localeCompare(b.key);
+    });
+  }
 
-  variablesToShow.forEach((variable, index) => {
+  variablesToShow.forEach((variable, renderedIndex) => {
+    // Find the actual index in the full allVariables array
+    const actualIndex = currentEnvData.allVariables.findIndex(v => 
+      v.key === variable.key && v.scope === variable.scope && v.scopeType === variable.scopeType
+    );
+    
     const tr = document.createElement('tr');
     const hasUnsafeValue = checkForUnsafeCommands(variable.value);
+    const isApplicable = isScopeApplicable(variable.scope);
+    
     tr.className = variable.editable ? '' : 'read-only';
     if (hasUnsafeValue) {
       tr.classList.add('unsafe-value');
+    }
+    if (!isApplicable) {
+      tr.classList.add('inactive-scope');
     }
     tr.style.cursor = 'pointer';
     tr.onclick = (e) => {
@@ -311,23 +462,21 @@ function renderVariables() {
       if (e.target.tagName === 'BUTTON') {
         return;
       }
-      selectVariable(index);
+      selectVariable(actualIndex);
     };
-
-    const isApplicable = isScopeApplicable(variable.scope);
     
     tr.innerHTML = `
       <td class="var-key">
         <input type="text" value="${escapeHtml(variable.key)}"
                ${variable.editable ? '' : 'readonly'}
-               onchange="updateVariable(${index}, 'key', this.value)"
-               onfocus="selectVariable(${index})">
+               onchange="updateVariable(${actualIndex}, 'key', this.value)"
+               onfocus="selectVariable(${actualIndex})">
       </td>
       <td class="var-scope">
         <div class="scope-cell">
           <span class="scope-badge scope-${variable.scopeType}${!isApplicable ? ' inactive' : ''}" title="${variable.scopeType} scope${!isApplicable ? ' (inactive on this system)' : ''}">${variable.scope}</span>
           ${variable.editable ? 
-            `<button class="scope-change-btn" onclick="event.stopPropagation(); showScopeManagerForVariable(${index})" title="Change scope">...</button>` : 
+            `<button class="scope-change-btn" onclick="event.stopPropagation(); showScopeManagerForVariable(${actualIndex})" title="Change scope">...</button>` : 
             ''
           }
         </div>
@@ -335,15 +484,16 @@ function renderVariables() {
       <td class="var-value">
         <input type="text" value="${escapeHtml(variable.value)}"
                ${variable.editable ? '' : 'readonly'}
-               onchange="updateVariable(${index}, 'value', this.value)"
-               onfocus="selectVariable(${index})"
+               onchange="updateVariable(${actualIndex}, 'value', this.value)"
+               onfocus="selectVariable(${actualIndex})"
                title="${hasUnsafeValue ? '⚠️ Contains command substitution' : ''}">
         ${hasUnsafeValue ? '<span class="unsafe-indicator" title="Contains command substitution (backticks or $())">⚠️</span>' : ''}
       </td>
       <td class="var-actions">
         ${variable.editable ?
-          `<button class="btn btn-small btn-delete" onclick="event.stopPropagation(); removeVariable(${index})" title="Delete variable">DELETE</button>` :
-          `<button class="btn btn-small btn-copy" onclick="event.stopPropagation(); copyToGlobal(${index})" title="Copy to global scope">COPY</button>`
+          `<button class="btn btn-small btn-delete" onclick="event.stopPropagation(); removeVariable(${actualIndex})" title="Delete variable">DELETE</button>` :
+          variable.scopeType === 'system' ? '' :
+          `<button class="btn btn-small btn-copy" onclick="event.stopPropagation(); copyToGlobal(${actualIndex})" title="Copy to global scope">COPY</button>`
         }
       </td>
     `;
@@ -356,74 +506,47 @@ function renderVariables() {
 }
 
 function isScopeApplicable(scopeName) {
-  // Check if scope matches current system
+  // System scope is always applicable
+  if (scopeName === 'system') {
+    return true;
+  }
+  
   const lowerScope = scopeName.toLowerCase();
   
-  // OS-specific scopes
-  if (lowerScope.includes('os-darwin') || lowerScope.includes('darwin')) {
-    return systemInfo.os === 'darwin';
-  }
-  if (lowerScope.includes('os-linux') || lowerScope === 'linux') {
-    return systemInfo.os === 'linux';
-  }
-  if (lowerScope.includes('os-windows') || lowerScope === 'windows') {
-    return systemInfo.os === 'windows';
+  // Match os-<uname> pattern (followed by - or end of string)
+  const osMatch = lowerScope.match(/\bos-([a-z0-9]+)(?:-|$)/);
+  if (osMatch && osMatch[1] !== systemInfo.os) {
+    return false;
   }
   
-  // Host-specific scopes
-  if (lowerScope.includes('host') && !lowerScope.startsWith('host')) {
-    // e.g., user-host-myhost
-    return systemInfo.hostname && lowerScope.includes(systemInfo.hostname);
+  // Match host-<hostname> pattern (followed by - or end of string)
+  const hostMatch = lowerScope.match(/\bhost-([a-z0-9_-]+?)(?:-(?!$)|$)/);
+  if (hostMatch && hostMatch[1] !== systemInfo.hostname) {
+    return false;
   }
   
-  // User-specific scopes (but not just "user")
-  if (lowerScope.includes('user-') || lowerScope.endsWith('-user')) {
-    return systemInfo.username && lowerScope.includes(systemInfo.username);
+  // Match user-<username> pattern (followed by - or end of string)
+  const userMatch = lowerScope.match(/\buser-([a-z0-9_-]+?)(?:-(?!$)|$)/);
+  if (userMatch && userMatch[1] !== systemInfo.username) {
+    return false;
   }
   
-  // Generic scopes are always applicable
+  // Scope is applicable if all patterns match (or are not present)
   return true;
 }
 
 function showScopeManagerForVariable(variableIndex) {
-  currentVariableForScopeChange = variableIndex;
   const variable = currentEnvData.allVariables[variableIndex];
+  if (!variable) return;
   
-  // Render scope selector
-  scopeSelectorList.innerHTML = '';
+  // Store variable identity, not index (index changes after rebuild)
+  currentVariableForScopeChange = {
+    key: variable.key,
+    scope: variable.scope,
+    scopeType: variable.scopeType
+  };
   
-  for (const scopeInfo of currentEnvData.loadingOrder) {
-    if (scopeInfo.type !== 'etc') continue; // Only show editable scopes
-    
-    const item = document.createElement('div');
-    item.className = 'scope-selector-item';
-    const isApplicable = isScopeApplicable(scopeInfo.scope);
-    
-    if (!isApplicable) {
-      item.classList.add('inactive');
-    }
-    
-    if (scopeInfo.scope === variable.scope && scopeInfo.type === variable.scopeType) {
-      item.classList.add('selected');
-    }
-    
-    const scopeName = scopeInfo.scope.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-    
-    item.innerHTML = `
-      <div class="scope-info">
-        <div class="scope-name">${scopeName}</div>
-        <div class="scope-details">${scopeInfo.type} • priority: ${scopeInfo.priority}${!isApplicable ? ' • inactive on this system' : ''}</div>
-      </div>
-    `;
-    
-    item.addEventListener('click', () => {
-      changeVariableScope(variableIndex, scopeInfo.scope, scopeInfo.type);
-    });
-    
-    scopeSelectorList.appendChild(item);
-  }
-  
-  // Render loading order list
+  // Render loading order list (which is also the scope selector now)
   renderModalLoadingOrder();
   
   scopeManagerModal.classList.add('active');
@@ -432,79 +555,150 @@ function showScopeManagerForVariable(variableIndex) {
 function renderModalLoadingOrder() {
   modalLoadingOrderList.innerHTML = '';
   
-  const order = currentEnvData.loadingOrder || [];
+  // Sort by priority (ascending - lower numbers first)
+  const order = [...currentEnvData.loadingOrder].sort((a, b) => a.priority - b.priority);
   
   order.forEach((scopeInfo, index) => {
     const li = document.createElement('li');
-    const isBuiltin = BUILTIN_SCOPES.has(scopeInfo.scope);
+    // Only NEW custom scopes added to auxscope can be deleted
+    // Only etc scopes IN auxscope can be dragged (to reorder their priority)
+    const isDeletable = scopeInfo.isCustomAuxscope === true && scopeInfo.type === 'etc';
+    const isDraggable = scopeInfo.isInAuxscope === true && scopeInfo.type === 'etc';
+    const isSystem = scopeInfo.scope === 'system';
     
     li.className = 'loading-order-item';
-    li.dataset.index = index;
-    li.dataset.builtin = isBuiltin;
+    li.dataset.scope = scopeInfo.scope;
+    li.dataset.type = scopeInfo.type;
+    li.dataset.builtin = scopeInfo.isBuiltin || false;
+    li.dataset.priority = scopeInfo.priority;
     
-    if (!isBuiltin) {
-      li.draggable = true;
+    // Highlight: pending selection takes priority over current variable's scope
+    if (window.pendingScopeSelection) {
+      if (scopeInfo.scope === window.pendingScopeSelection.scope && scopeInfo.type === window.pendingScopeSelection.type) {
+        li.classList.add('selected');
+      }
+    } else if (currentVariableForScopeChange !== null) {
+      if (scopeInfo.scope === currentVariableForScopeChange.scope && scopeInfo.type === currentVariableForScopeChange.scopeType) {
+        li.classList.add('selected');
+      }
     }
     
     const scopeName = scopeInfo.scope.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
     const hasVars = (scopeInfo.type === 'etc' ? currentEnvData.etc[scopeInfo.scope] : currentEnvData.share[scopeInfo.scope])?.length > 0;
     
     li.innerHTML = `
-      ${isBuiltin ? '<span class="builtin-indicator">⚙️</span>' : '<span class="drag-handle">⋮⋮</span>'}
+      ${isDraggable ? '<span class="drag-handle">⋮⋮</span>' : (isSystem ? '<span class="builtin-indicator">⚙️</span>' : '<span class="builtin-indicator"></span>')}
       <span class="scope-name">${scopeName}</span>
       <span class="scope-type">${scopeInfo.type}</span>
       <span class="priority">${scopeInfo.priority}</span>
       <span class="var-indicator">${hasVars ? '●' : '○'}</span>
-      ${!isBuiltin ? `<button class="btn-icon delete-scope" onclick="deleteScope(${index})" title="Delete custom scope">DELETE</button>` : ''}
+      ${isDeletable ? `<button class="btn-icon delete-scope" onclick="deleteScopeByName('${scopeInfo.scope}', '${scopeInfo.type}')" title="Remove from auxscope">🗑️</button>` : ''}
     `;
     
-    if (!isBuiltin) {
+    if (isDraggable) {
+      li.draggable = true;
       li.addEventListener('dragstart', handleModalDragStart);
+      li.addEventListener('dragend', handleDragEnd);
+    }
+    
+    // All items can be drop targets (except system)
+    if (scopeInfo.scope !== 'system') {
       li.addEventListener('dragover', handleDragOver);
       li.addEventListener('drop', handleModalDrop);
-      li.addEventListener('dragend', handleDragEnd);
+    }
+    
+    // Make scope selectable when changing variable scope
+    if (scopeInfo.type === 'etc' && scopeInfo.scope !== 'system' && currentVariableForScopeChange !== null) {
+      li.addEventListener('click', (e) => {
+        // Don't trigger if clicking delete button or drag handle
+        if (e.target.classList.contains('delete-scope') || e.target.closest('.delete-scope') || 
+            e.target.classList.contains('drag-handle')) {
+          return;
+        }
+        // Just highlight the selection, don't close modal yet
+        document.querySelectorAll('.loading-order-item').forEach(item => item.classList.remove('selected'));
+        li.classList.add('selected');
+        // Store the pending selection
+        window.pendingScopeSelection = { scope: scopeInfo.scope, type: scopeInfo.type };
+      });
+      li.style.cursor = 'pointer';
     }
     
     modalLoadingOrderList.appendChild(li);
   });
 }
 
+function changeVariableScopeByIdentity(varIdentity, newScope, newScopeType) {
+  // Find the variable by its identity (key + old scope + old scopeType)
+  const oldSourceData = currentEnvData[varIdentity.scopeType][varIdentity.scope];
+  if (!oldSourceData) return;
+  
+  const varIndex = oldSourceData.findIndex(v => v.name === varIdentity.key);
+  if (varIndex < 0) return;
+  
+  // Check for duplicate in target scope
+  if (!currentEnvData[newScopeType][newScope]) {
+    currentEnvData[newScopeType][newScope] = [];
+  }
+  
+  const duplicate = currentEnvData[newScopeType][newScope].find(v => v.name === varIdentity.key);
+  if (duplicate) {
+    showStatus(`Variable "${varIdentity.key}" already exists in ${newScope} scope`, 'error');
+    return;
+  }
+  
+  const varData = oldSourceData.splice(varIndex, 1)[0];
+  currentEnvData[newScopeType][newScope].push(varData);
+  
+  // Rebuild unified variables with new scope
+  rebuildUnifiedVariables();
+  
+  // Render without sorting to keep current selection visible
+  renderVariables(true);
+  
+  // Find and select the row by variable name
+  setTimeout(() => {
+    const rows = variablesTbody.querySelectorAll('tr');
+    rows.forEach(row => {
+      const keyInput = row.querySelector('.var-key input');
+      if (keyInput && keyInput.value === varIdentity.key) {
+        row.classList.add('selected');
+        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    });
+  }, 100);
+  
+  // Schedule delayed resort after 3 seconds of inactivity
+  if (resortTimer) clearTimeout(resortTimer);
+  pendingResort = true;
+  
+  const tryResort = () => {
+    if (!document.activeElement || document.activeElement.tagName !== 'INPUT' || !document.activeElement.closest('#variables-tbody')) {
+      renderVariables(false);
+      pendingResort = false;
+      resortTimer = null;
+    } else {
+      // Still editing, retry in 3 seconds
+      resortTimer = setTimeout(tryResort, 3000);
+    }
+  };
+  
+  resortTimer = setTimeout(tryResort, 3000);
+  
+  hideScopeManagerModal();
+  setModified(true);
+  showStatus('Variable scope changed', 'success');
+}
+
 function changeVariableScope(variableIndex, newScope, newScopeType) {
   const variable = currentEnvData.allVariables[variableIndex];
   if (!variable || !variable.editable) return;
   
-  const oldScope = variable.scope;
-  const oldScopeType = variable.scopeType;
-  
-  // Remove from old scope
-  const oldSourceData = currentEnvData[oldScopeType][oldScope];
-  if (oldSourceData) {
-    const varIndex = oldSourceData.findIndex(v => v.name === variable.key);
-    if (varIndex >= 0) {
-      const varData = oldSourceData.splice(varIndex, 1)[0];
-      
-      // Add to new scope
-      if (!currentEnvData[newScopeType][newScope]) {
-        currentEnvData[newScopeType][newScope] = [];
-      }
-      currentEnvData[newScopeType][newScope].push(varData);
-    }
-  }
-  
-  // Update variable
-  variable.scope = newScope;
-  variable.scopeType = newScopeType;
-  
-  // Update priority
-  const scopeInfo = currentEnvData.loadingOrder.find(s => s.scope === newScope && s.type === newScopeType);
-  if (scopeInfo) {
-    variable.priority = scopeInfo.priority;
-  }
-  
-  renderVariables();
-  hideScopeManagerModal();
-  setModified(true);
-  showStatus('Variable scope changed', 'success');
+  changeVariableScopeByIdentity({
+    key: variable.key,
+    scope: variable.scope,
+    scopeType: variable.scopeType
+  }, newScope, newScopeType);
 }
 
 function hideScopeManagerModal() {
@@ -521,48 +715,130 @@ function handleModalDragStart(e) {
   e.dataTransfer.setData('text/html', this.innerHTML);
 }
 
+function handleDragEnd(e) {
+  this.classList.remove('dragging');
+  // Clear all drag-over indicators
+  document.querySelectorAll('.loading-order-item').forEach(item => {
+    item.classList.remove('drag-over-top', 'drag-over-bottom');
+  });
+}
+
 function handleDragOver(e) {
   if (e.preventDefault) {
     e.preventDefault();
   }
   e.dataTransfer.dropEffect = 'move';
+  
+  // Clear all previous drag-over indicators
+  document.querySelectorAll('.loading-order-item').forEach(item => {
+    item.classList.remove('drag-over-top', 'drag-over-bottom');
+  });
+  
+  // Get the element we're hovering over
+  const afterElement = getDragAfterElement(modalLoadingOrderList, e.clientY);
+  
+  if (afterElement) {
+    // Show indicator above the element we'd insert before
+    afterElement.classList.add('drag-over-top');
+  } else {
+    // We're at the end, show indicator below the last item
+    const items = modalLoadingOrderList.querySelectorAll('.loading-order-item:not(.dragging)');
+    if (items.length > 0) {
+      items[items.length - 1].classList.add('drag-over-bottom');
+    }
+  }
+  
   return false;
+}
+
+function getDragAfterElement(container, y) {
+  const draggableElements = [...container.querySelectorAll('.loading-order-item:not(.dragging)')];
+  
+  return draggableElements.reduce((closest, child) => {
+    const box = child.getBoundingClientRect();
+    const offset = y - box.top - box.height / 2;
+    
+    if (offset < 0 && offset > closest.offset) {
+      return { offset: offset, element: child };
+    } else {
+      return closest;
+    }
+  }, { offset: Number.NEGATIVE_INFINITY }).element;
 }
 
 function handleModalDrop(e) {
   if (e.stopPropagation) {
     e.stopPropagation();
   }
+  
+  // Clear drag indicators
+  document.querySelectorAll('.loading-order-item').forEach(item => {
+    item.classList.remove('drag-over-top', 'drag-over-bottom');
+  });
 
-  if (draggedElement !== this) {
-    const draggedIndex = parseInt(draggedElement.dataset.index);
-    const targetIndex = parseInt(this.dataset.index);
-
-    const item = currentEnvData.loadingOrder.splice(draggedIndex, 1)[0];
-    currentEnvData.loadingOrder.splice(targetIndex, 0, item);
-
-    // Rebuild the unified variable list with new priority order
-    rebuildUnifiedVariables();
-    renderModalLoadingOrder();
-    renderVariables();
-    setModified(true);
+  const draggedScope = draggedElement.dataset.scope;
+  const draggedType = draggedElement.dataset.type;
+  const dropTarget = e.currentTarget;
+  const dropScope = dropTarget.dataset.scope;
+  
+  // Don't allow dropping on system scope
+  if (dropScope === 'system') return false;
+  
+  // Find the dragged scope in loadingOrder
+  const draggedScopeInfo = currentEnvData.loadingOrder.find(
+    s => s.scope === draggedScope && s.type === draggedType
+  );
+  
+  const dropScopeInfo = currentEnvData.loadingOrder.find(
+    s => s.scope === dropScope && s.type === dropTarget.dataset.type
+  );
+  
+  if (!draggedScopeInfo || !dropScopeInfo) return false;
+  
+  // Check if we're dropping above or below
+  const rect = dropTarget.getBoundingClientRect();
+  const midpoint = rect.top + rect.height / 2;
+  const dropAbove = e.clientY < midpoint;
+  
+  // Get sorted scopes to find neighbors
+  const sorted = [...currentEnvData.loadingOrder].sort((a, b) => a.priority - b.priority);
+  const dropIndex = sorted.findIndex(s => s.scope === dropScope && s.type === dropTarget.dataset.type);
+  
+  if (dropAbove) {
+    const prevPriority = dropIndex > 0 ? sorted[dropIndex - 1].priority : 0;
+    const dropPriority = sorted[dropIndex].priority;
+    draggedScopeInfo.priority = (prevPriority + dropPriority) / 2;
+  } else {
+    const dropPriority = sorted[dropIndex].priority;
+    const nextPriority = dropIndex < sorted.length - 1 ? sorted[dropIndex + 1].priority : dropPriority + 100;
+    draggedScopeInfo.priority = (dropPriority + nextPriority) / 2;
   }
+
+  // Rebuild the unified variable list with new priority order
+  rebuildUnifiedVariables();
+  renderModalLoadingOrder();
+  renderVariables();
+  setModified(true);
 
   return false;
 }
 
-function handleDragEnd(e) {
+function handleDragEndOld(e) {
   this.classList.remove('dragging');
   draggedElement = null;
 }
 
 function rebuildUnifiedVariables() {
-  // Rebuild the unified variable list based on new priority order
+  // Rebuild the unified variable list based on priority order
+  // Lower priority number = loaded first (highest precedence)
   const allVariables = [];
   const variableKeys = new Set();
 
-  // Process in priority order (lower priority first, so higher priority overrides)
-  for (const scopeInfo of currentEnvData.loadingOrder) {
+  // Sort by priority ascending (lowest first)
+  const sortedScopes = [...currentEnvData.loadingOrder].sort((a, b) => a.priority - b.priority);
+
+  // Process in priority order - first loaded has highest precedence
+  for (const scopeInfo of sortedScopes) {
     const scopeData = scopeInfo.type === 'etc' ? currentEnvData.etc[scopeInfo.scope] : currentEnvData.share[scopeInfo.scope];
     if (scopeData) {
       for (const variable of scopeData) {
@@ -697,32 +973,67 @@ async function selectVariable(index) {
     previousSelected.classList.remove('selected');
   }
   
-  // Add selection to current row
+  // Find the row that corresponds to this variable
   const rows = variablesTbody.querySelectorAll('tr');
-  if (rows[index]) {
-    rows[index].classList.add('selected');
+  for (const row of rows) {
+    const keyInput = row.querySelector('.var-key input');
+    if (keyInput && keyInput.value === variable.key) {
+      row.classList.add('selected');
+      break;
+    }
   }
+  
+  // Get preview context
+  const previewContext = {
+    os: previewOS.value || systemInfo.os,
+    hostname: previewHostname.value.trim() || systemInfo.hostname,
+    username: previewUsername.value.trim() || systemInfo.username
+  };
   
   // Update preview
   previewKey.textContent = variable.key;
   previewScope.textContent = `[${variable.scopeType}:${variable.scope}, priority: ${variable.priority}]`;
   previewRaw.textContent = variable.value || '(empty)';
   
+  // Check if this variable's scope matches the preview context
+  if (!isScopeApplicableForPreview(variable.scope, previewContext)) {
+    previewEvaluated.textContent = '(scope not applicable for selected platform/hostname/username)';
+    previewEvaluated.style.fontStyle = 'italic';
+    previewEvaluated.style.color = 'var(--text-secondary)';
+    return;
+  }
+  
   // Evaluate the value
+  previewEvaluated.style.fontStyle = 'normal';
+  previewEvaluated.style.color = 'var(--text-primary)';
   previewEvaluated.textContent = 'Evaluating...';
-  const evaluated = await evaluateValue(variable.value, index);
+  const evaluated = await evaluateValue(variable.value, index, previewContext);
   previewEvaluated.textContent = evaluated;
 }
 
-async function evaluateValue(value, currentIndex) {
+async function evaluateValue(value, currentIndex, previewContext) {
   if (!value) return '(empty)';
   
   // Build environment from all variables with higher priority (lower index)
+  // Filter based on preview context (platform/hostname/username)
   const env = {};
   for (let i = 0; i < currentIndex; i++) {
     const v = currentEnvData.allVariables[i];
-    if (v.enabled !== false) {
-      env[v.key] = v.value || '';
+    if (v.enabled !== false && isScopeApplicableForPreview(v.scope, previewContext)) {
+      // Override system variables with preview context values
+      if (v.scopeType === 'system') {
+        if (v.key === 'MULLE_HOSTNAME') {
+          env[v.key] = previewContext.hostname;
+        } else if (v.key === 'MULLE_USERNAME') {
+          env[v.key] = previewContext.username;
+        } else if (v.key === 'MULLE_UNAME') {
+          env[v.key] = previewContext.os;
+        } else {
+          env[v.key] = v.value || '';
+        }
+      } else {
+        env[v.key] = v.value || '';
+      }
     }
   }
   
@@ -734,6 +1045,36 @@ async function evaluateValue(value, currentIndex) {
     console.error('Failed to evaluate value:', error);
     return `(evaluation error: ${error.message})`;
   }
+}
+
+function isScopeApplicableForPreview(scopeName, context) {
+  // System scope is always applicable
+  if (scopeName === 'system') {
+    return true;
+  }
+  
+  const lowerScope = scopeName.toLowerCase();
+  
+  // Match os-<uname> pattern (followed by - or end of string)
+  const osMatch = lowerScope.match(/\bos-([a-z0-9]+)(?:-|$)/);
+  if (osMatch && osMatch[1] !== context.os) {
+    return false;
+  }
+  
+  // Match host-<hostname> pattern (followed by - or end of string)
+  const hostMatch = lowerScope.match(/\bhost-([a-z0-9_-]+?)(?:-(?!$)|$)/);
+  if (hostMatch && hostMatch[1] !== context.hostname) {
+    return false;
+  }
+  
+  // Match user-<username> pattern (followed by - or end of string)
+  const userMatch = lowerScope.match(/\buser-([a-z0-9_-]+?)(?:-(?!$)|$)/);
+  if (userMatch && userMatch[1] !== context.username) {
+    return false;
+  }
+  
+  // Scope is applicable if all patterns match (or are not present)
+  return true;
 }
 
 function showAddVariableModal() {
@@ -775,23 +1116,36 @@ function addVariable() {
 
   // Rebuild unified variables
   rebuildUnifiedVariables();
+  
+  // Clear search filter to show the new variable
+  searchInput.value = '';
+  
   renderVariables();
   setModified(true);
   
-  // Find the new variable in the rendered list and focus it
-  const newIndex = currentEnvData.allVariables.findIndex(v => 
+  // Find the actual index in allVariables (not the rendered index)
+  const actualIndex = currentEnvData.allVariables.findIndex(v => 
     v.key === placeholderName && v.scope === 'global' && v.scopeType === 'etc'
   );
   
-  if (newIndex >= 0) {
+  if (actualIndex >= 0) {
     // Scroll to and select the new row
+    // Count how many variables appear before this one in the rendered list
+    let renderedIndex = 0;
+    for (let i = 0; i < actualIndex; i++) {
+      const v = currentEnvData.allVariables[i];
+      if (v.priority <= currentEnvData.allVariables[actualIndex].priority) {
+        renderedIndex++;
+      }
+    }
+    
     const rows = variablesTbody.querySelectorAll('tr');
-    if (rows[newIndex]) {
-      rows[newIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (rows[renderedIndex]) {
+      rows[renderedIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
       
       // Focus on the key input for editing
       setTimeout(() => {
-        const keyInput = rows[newIndex].querySelector('.var-key input');
+        const keyInput = rows[renderedIndex].querySelector('.var-key input');
         if (keyInput) {
           keyInput.focus();
           keyInput.select();
@@ -803,33 +1157,7 @@ function addVariable() {
   showStatus('New variable added to global scope - enter name', 'success');
 }
 
-function toggleScopeFilter() {
-  // Toggle all scopes on/off
-  if (selectedScopes.size > 0) {
-    selectedScopes.clear();
-  } else {
-    // Select all scopes
-    for (const scopeInfo of currentEnvData.loadingOrder) {
-      const scopeKey = `${scopeInfo.type}:${scopeInfo.scope}`;
-      selectedScopes.add(scopeKey);
-    }
-  }
 
-  // Update UI
-  document.querySelectorAll('.scope-item').forEach(item => {
-    const itemScope = item.dataset.scope;
-    const itemType = item.dataset.type;
-    const itemKey = `${itemType}:${itemScope}`;
-
-    if (selectedScopes.has(itemKey)) {
-      item.classList.add('active');
-    } else {
-      item.classList.remove('active');
-    }
-  });
-
-  renderVariables();
-}
 
 async function saveEnvironment() {
   if (!isModified) {
@@ -866,13 +1194,9 @@ function updateModifiedIndicator() {
 }
 
 function showStatus(message, type = 'info') {
-  statusText.textContent = message;
-  statusText.className = type;
-
-  setTimeout(() => {
-    statusText.textContent = 'Ready';
-    statusText.className = '';
-  }, 3000);
+  // Show status in console instead
+  const prefix = type === 'error' ? '❌' : type === 'success' ? '✓' : 'ℹ️';
+  console.log(`${prefix} ${message}`);
 }
 
 function escapeHtml(text) {
@@ -882,7 +1206,13 @@ function escapeHtml(text) {
 }
 
 // Scope management functions
-function showAddScopeModal() {
+let isAddingScopeFromManager = false;
+
+function showAddScopeModal(fromManager = false) {
+  isAddingScopeFromManager = fromManager;
+  if (fromManager) {
+    scopeManagerModal.classList.remove('active');
+  }
   addScopeModal.classList.add('active');
   scopeNameInput.focus();
 }
@@ -890,20 +1220,23 @@ function showAddScopeModal() {
 function hideAddScopeModal() {
   addScopeModal.classList.remove('active');
   document.getElementById('add-scope-form').reset();
+  if (isAddingScopeFromManager) {
+    scopeManagerModal.classList.add('active');
+    renderModalLoadingOrder();
+    isAddingScopeFromManager = false;
+  }
 }
 
 function addScope() {
   const name = scopeNameInput.value.trim();
-  const type = scopeTypeInput.value;
-  const priority = parseInt(scopePriorityInput.value);
 
   if (!name) {
     showStatus('Scope name is required', 'error');
     return;
   }
 
-  if (!/^[A-Za-z_][A-Za-z0-9_-]*$/.test(name)) {
-    showStatus('Invalid scope name format', 'error');
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+    showStatus('Invalid scope name format - use only letters, numbers, and underscores', 'error');
     return;
   }
 
@@ -919,21 +1252,19 @@ function addScope() {
     return;
   }
 
-  // Add the new scope
+  // Add the new scope with priority 50 (after global)
   const newScope = {
     scope: name,
-    type: type,
-    priority: priority
+    type: 'etc',
+    priority: 50,
+    isCustomAuxscope: true,
+    isInAuxscope: true
   };
 
   currentEnvData.loadingOrder.push(newScope);
 
   // Initialize empty scope data
-  if (type === 'etc') {
-    currentEnvData.etc[name] = [];
-  } else {
-    currentEnvData.share[name] = [];
-  }
+  currentEnvData.etc[name] = [];
 
   // Rebuild unified variables
   rebuildUnifiedVariables();
@@ -942,8 +1273,24 @@ function addScope() {
   renderVariables();
 
   hideAddScopeModal();
+  
+  // If we're adding from scope manager, select this new scope and re-render modal
+  if (currentVariableForScopeChange !== null) {
+    window.pendingScopeSelection = { scope: name, type: 'etc' };
+    renderModalLoadingOrder();
+    scopeManagerModal.classList.add('active');
+    
+    // Scroll to the new scope
+    setTimeout(() => {
+      const newScopeItem = modalLoadingOrderList.querySelector(`[data-scope="${name}"]`);
+      if (newScopeItem) {
+        newScopeItem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 100);
+  }
+  
   setModified(true);
-  showStatus('Scope added successfully', 'success');
+  showStatus('Scope added successfully - drag to reorder', 'success');
 }
 
 function copyToGlobal(variableIndex) {
@@ -1003,32 +1350,62 @@ function copyToGlobal(variableIndex) {
   showStatus(`Copied "${variable.key}" to global scope - edit name if needed`, 'success');
 }
 
-function deleteScope(index) {
-  const scopeInfo = currentEnvData.loadingOrder[index];
-  if (!scopeInfo || BUILTIN_SCOPES.has(scopeInfo.scope)) {
+function deleteScopeByName(scopeName, scopeType) {
+  if (BUILTIN_SCOPES.has(scopeName)) {
     showStatus('Cannot delete built-in scope', 'error');
     return;
   }
 
+  // Check if there are variables in this scope
+  const scopeVariables = scopeType === 'etc' && currentEnvData.etc[scopeName] 
+    ? currentEnvData.etc[scopeName] 
+    : [];
+  
+  let confirmMessage = `Remove "${scopeName}" from auxscope?`;
+  
+  if (scopeVariables.length > 0) {
+    const varNames = scopeVariables.map(v => v.name).join(', ');
+    confirmMessage = `Remove "${scopeName}" from auxscope?\n\nWARNING: This scope has ${scopeVariables.length} variable(s): ${varNames}\n\nThese variables will be removed from the main screen and will no longer be loaded.`;
+  }
+
   // Confirm deletion
-  if (!confirm(`Delete custom scope "${scopeInfo.scope}"? This will remove all variables in this scope.`)) {
+  if (!confirm(confirmMessage)) {
     return;
   }
 
-  // Remove from loading order
-  currentEnvData.loadingOrder.splice(index, 1);
+  // Find and remove from loading order (auxscope)
+  const index = currentEnvData.loadingOrder.findIndex(
+    s => s.scope === scopeName && s.type === scopeType
+  );
+  
+  if (index >= 0) {
+    currentEnvData.loadingOrder.splice(index, 1);
+  }
 
-  // Remove scope data
-  delete currentEnvData[scopeInfo.type][scopeInfo.scope];
+  // Remove all variables from this scope in the unified list
+  currentEnvData.allVariables = currentEnvData.allVariables.filter(
+    v => !(v.scope === scopeName && v.scopeType === scopeType)
+  );
+  
+  // Remove the scope data
+  if (scopeType === 'etc' && currentEnvData.etc[scopeName]) {
+    delete currentEnvData.etc[scopeName];
+  }
 
   // Rebuild unified variables
   rebuildUnifiedVariables();
 
   // Re-render UI
+  renderModalLoadingOrder();
   renderVariables();
 
   setModified(true);
-  showStatus('Scope deleted successfully', 'success');
+  
+  if (scopeVariables.length > 0) {
+    showStatus(`Scope removed - ${scopeVariables.length} variable(s) deleted`, 'success');
+  } else {
+    showStatus('Scope removed from auxscope', 'success');
+  }
 }
 
 // Initialize the app

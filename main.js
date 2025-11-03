@@ -473,12 +473,17 @@ async function readEnvironmentFiles(projectPath) {
     if (fsSync.existsSync(auxscopePath)) {
       const auxscopeContent = await fs.readFile(auxscopePath, 'utf8');
       const auxScopes = parseAuxscope(auxscopeContent, 'etc');
-      // Add auxscopes to hardcoded scopes, overriding project priority
+      // Add auxscopes to hardcoded scopes, overriding priority for existing scopes
       auxScopes.forEach(auxScope => {
         const existingIndex = hardcodedScopes.findIndex(s => s.scope === auxScope.scope && s.type === auxScope.type);
         if (existingIndex >= 0) {
+          // Existing hardcoded scope - just override priority, NOT deletable but IS draggable
           hardcodedScopes[existingIndex].priority = auxScope.priority;
+          hardcodedScopes[existingIndex].isInAuxscope = true;
         } else {
+          // New custom scope added by auxscope - IS deletable and draggable
+          auxScope.isCustomAuxscope = true;
+          auxScope.isInAuxscope = true;
           hardcodedScopes.push(auxScope);
         }
       });
@@ -634,19 +639,15 @@ async function saveEnvironmentFiles(projectPath, envData) {
     }
   }
 
-  // Save auxscope - only save etc scopes that have variables
-  const etcScopesWithVars = Object.keys(scopeVariables)
-    .filter(key => key.startsWith('etc:'))
-    .map(key => key.substring(4));
+  // Save auxscope - save all etc scopes that are in auxscope (regardless of whether they have variables)
+  const auxscopes = envData.loadingOrder
+    .filter(s => s.type === 'etc' && s.isInAuxscope)
+    .map(s => `${s.scope};${s.priority}`)
+    .join('\n');
 
-  if (etcScopesWithVars.length > 0) {
+  if (auxscopes) {
     const auxscopePath = path.join(etcEnvPath, 'auxscope');
-    const auxscopeContent = etcScopesWithVars.map(scope => {
-      const scopeInfo = envData.loadingOrder.find(s => s.scope === scope && s.type === 'etc');
-      const priority = scopeInfo ? scopeInfo.priority : 20;
-      return `${scope};${priority}`;
-    }).join('\n') + '\n';
-    await fs.writeFile(auxscopePath, auxscopeContent);
+    await fs.writeFile(auxscopePath, auxscopes + '\n');
   }
 }
 
