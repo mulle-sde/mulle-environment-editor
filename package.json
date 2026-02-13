@@ -1,7 +1,7 @@
 {
   "name": "mulle-environment-editor",
   "version": "0.0.1",
-  "description": "🌵 GUI App to edit mulle-sourcetree config files",
+  "description": "🏕️ GUI Editor for the mulle-sde environment",
   "main": "main.js",
   "scripts": {
     "start": "electron . --no-sandbox",
@@ -18,6 +18,7 @@
   },
   "keywords": [
     "mulle-sde",
+    "mulle-env",
     "environment",
     "editor",
     "electron"
@@ -57,7 +58,7 @@
       ],
       "category": "Development",
       "icon": "icon-512.png",
-      "description": "🌵 GUI App to edit mulle-sourcetree config files",
+      "description": "🏕️ GUI Editor for the mulle-sde environment",
       "executableName": "mulle-environment-editor"
     },
     "mac": {
