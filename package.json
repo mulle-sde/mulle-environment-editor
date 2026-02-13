@@ -1,8 +1,11 @@
 {
   "name": "mulle-environment-editor",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "🏕️ GUI Editor for the mulle-sde environment",
   "main": "main.js",
+  "bin": {
+    "mulle-environment-editor": "./cli.js"
+  },
   "scripts": {
     "start": "electron . --no-sandbox",
     "dev": "electron . --no-sandbox --inspect",
