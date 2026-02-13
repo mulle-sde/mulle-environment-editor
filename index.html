@@ -73,34 +73,6 @@
                 <strong id="preview-key">Select a variable to preview</strong>
                 <span id="preview-scope" class="preview-scope-info"></span>
             </div>
-            <div class="preview-controls">
-                <div class="preview-control-group">
-                    <label for="preview-os">Platform (OS):</label>
-                    <select id="preview-os">
-                        <option value="">Current</option>
-                        <option value="android">Android</option>
-                        <option value="darwin">Darwin</option>
-                        <option value="dragonfly">Dragonfly</option>
-                        <option value="freebsd">FreeBSD</option>
-                        <option value="hpux">HP-UX</option>
-                        <option value="linux">Linux</option>
-                        <option value="mingw">MinGW</option>
-                        <option value="msys">MSYS</option>
-                        <option value="netbsd">NetBSD</option>
-                        <option value="openbsd">OpenBSD</option>
-                        <option value="sunos">SunOS</option>
-                        <option value="windows">Windows</option>
-                    </select>
-                </div>
-                <div class="preview-control-group">
-                    <label for="preview-hostname">Hostname:</label>
-                    <input type="text" id="preview-hostname" placeholder="Current hostname">
-                </div>
-                <div class="preview-control-group">
-                    <label for="preview-username">Username:</label>
-                    <input type="text" id="preview-username" placeholder="Current username">
-                </div>
-            </div>
             <div class="preview-content">
                 <div class="preview-section">
                     <label>Raw Value:</label>
@@ -183,6 +155,7 @@
             <div class="modal-body">
                 <div class="scope-manager-content">
                     <div class="scope-management-section-full">
+                        <div id="effective-system-info" class="help-text" style="margin-bottom: 10px; padding: 8px; background: var(--bg-secondary); border-radius: 4px;"></div>
                         <h4>Scope Loading Priority</h4>
                         <p class="help-text">Lower numbers = loaded first. Drag to reorder. Click to select scope for variable.</p>
                         <ul id="modal-loading-order-list" class="loading-order-list"></ul>
@@ -193,6 +166,44 @@
             <div class="modal-footer">
                 <button type="button" class="btn" id="confirm-scope-manager">OK</button>
                 <button type="button" class="btn btn-secondary" id="cancel-scope-manager">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Settings</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="help-text">Override system values for testing different environments. Leave empty to use actual system values.</p>
+                <p class="help-text"><strong>Note:</strong> Changing these values will affect which scopes are active. To add variables for the new values, create new scopes like <code>host-&lt;newhostname&gt;</code> using "Add Custom Scope".</p>
+                <form id="settings-form">
+                    <div class="form-group">
+                        <label for="settings-virtual-root">MULLE_VIRTUAL_ROOT:</label>
+                        <input type="text" id="settings-virtual-root" placeholder="Current project path">
+                    </div>
+                    <div class="form-group">
+                        <label for="settings-os">MULLE_UNAME (OS):</label>
+                        <input type="text" id="settings-os" placeholder="Current OS">
+                        <small class="form-help">e.g., linux, darwin, windows</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="settings-hostname">MULLE_HOSTNAME:</label>
+                        <input type="text" id="settings-hostname" placeholder="Current hostname">
+                    </div>
+                    <div class="form-group">
+                        <label for="settings-username">MULLE_USERNAME:</label>
+                        <input type="text" id="settings-username" placeholder="Current username">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" id="reset-settings">Reset to System</button>
+                <button type="button" class="btn btn-secondary" id="cancel-settings">Cancel</button>
+                <button type="button" class="btn btn-primary" id="confirm-settings">Apply</button>
             </div>
         </div>
     </div>

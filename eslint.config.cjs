@@ -1,6 +1,5 @@
 /** eslint.config.cjs */
 const alignAssignments = require('eslint-plugin-align-assignments');
-//const alignAssignments = require('@0x706b/eslint-plugin-align-assignments');
 
 module.exports = [
    {

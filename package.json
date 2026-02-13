@@ -1,7 +1,7 @@
 {
   "name": "mulle-environment-editor",
   "version": "1.0.0",
-  "description": "A visual editor for mulle-sde environment files",
+  "description": "🌵 GUI App to edit mulle-sourcetree config files",
   "main": "main.js",
   "scripts": {
     "start": "electron . --no-sandbox",
@@ -27,7 +27,8 @@
   "devDependencies": {
     "electron": "^28.3.3",
     "electron-builder": "^24.13.3",
-    "eslint": "^8.57.1"
+    "eslint": "^8.57.1",
+    "eslint-plugin-align-assignments": "^1.1.2"
   },
   "build": {
     "appId": "com.mulle-kybernetik.environment-editor",
@@ -49,7 +50,10 @@
           ]
         }
       ],
-      "category": "Development"
+      "category": "Development",
+      "icon": "icon-512.png",
+      "description": "🌵 GUI App to edit mulle-sourcetree config files",
+      "executableName": "mulle-environment-editor"
     },
     "mac": {
       "target": [
