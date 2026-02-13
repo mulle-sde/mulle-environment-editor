@@ -1,6 +1,6 @@
 {
   "name": "mulle-environment-editor",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "🏕️ GUI Editor for the mulle-sde environment",
   "main": "main.js",
   "bin": {
@@ -29,10 +29,10 @@
   "author": "Your Name",
   "license": "MIT",
   "dependencies": {
-    "electron": "^28.3.3"
+    "electron": "^40.4.1"
   },
   "devDependencies": {
-    "electron-builder": "^24.13.3",
+    "electron-builder": "^26.7.0",
     "eslint": "^8.57.1",
     "eslint-plugin-align-assignments": "^1.1.2"
   },

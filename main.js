@@ -3,6 +3,9 @@ const path = require("path");
 const fs = require("fs").promises;
 const fsSync = require("fs");
 
+// Disable GPU acceleration to avoid GPU process errors
+app.disableHardwareAcceleration();
+
 let mainWindow;
 let currentProjectPath = "";
 
@@ -44,10 +47,14 @@ function createWindow()
 
    mainWindow.webContents.on("console-message", (event, level, message, line, sourceId) => 
    {
-      const prefixes = ["[VERBOSE]", "[INFO]", "[WARN]", "[ERROR]"];
-      const prefix = prefixes[level] ?? "[LOG]";
-      const out = console[["log","log","warn","error"][level]] || console.log;
-      out(`${prefix} [Renderer:${path.basename(sourceId)}:${line}] ${message}`);
+      // Only log warnings and errors by default (level 2=warn, 3=error)
+      if (level >= 2 || process.env.DEBUG) 
+      {
+         const prefixes = ["[VERBOSE]", "[INFO]", "[WARN]", "[ERROR]"];
+         const prefix = prefixes[level] ?? "[LOG]";
+         const out = console[["log","log","warn","error"][level]] || console.log;
+         out(`${prefix} [Renderer:${path.basename(sourceId)}:${line}] ${message}`);
+      }
    });
 
    if (windowState.maximized) 
