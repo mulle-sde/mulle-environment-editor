@@ -1,13 +1,12 @@
 # Mulle Environment Editor
 
-A visual editor for mulle-sde environment files, built with Electron.
+A visual editor for mulle-sde environment files.
 
 ## Features
 
 - **Visual Environment Editing**: Edit environment variables in a clean, modern interface
 - **Scope Management**: Manage different environment scopes (project, global, host-specific, user-specific, etc.)
 - **Loading Order**: Drag-and-drop interface to reorder environment loading priority
-- **Dual View Modes**: Switch between table view and text view for editing
 - **Real-time Preview**: See how your environment variables will be applied
 - **Recent Projects**: Quick access to recently opened projects
 - **Cross-platform**: Works on Linux, macOS, and Windows
@@ -16,9 +15,9 @@ A visual editor for mulle-sde environment files, built with Electron.
 
 ### From Source
 
-```bash
+``` bash
 # Clone the repository
-git clone <repository-url>
+git clone https://github.com/mulle-sde/mulle-environment-editor.git
 cd mulle-environment-editor
 
 # Install dependencies
@@ -44,9 +43,39 @@ Download the latest release for your platform from the [releases page](releases)
 4. **Reorder Loading Priority**: Drag and drop scopes in the loading order section
 5. **Save Changes**: Click "Save" to write changes back to the environment files
 
+### Loading the Environment into Your Shell
+
+*This is the job `mulle-sde` and `mulle-env` do for you automatically. But 
+you can do this also manually.*
+
+After editing environment files, you need to source them to apply the changes to your shell:
+
+```bash
+# Source the environment into your current shell
+cd /path/to/your/project
+. .mulle/share/env/environment.sh
+```
+
+This will load all environment variables according to their priority and scope applicability.
+
+### Testing Environment Without Affecting Your Shell
+
+To preview what environment variables will be set without modifying your current shell:
+
+```bash
+# Run in a clean environment and display all variables
+env -i bash -c '. .mulle/share/env/environment.sh && env | sort'
+
+# Or export from the editor and test the exported script
+env -i bash -c '. environment-export.sh && env | sort'
+```
+
+The `env -i` command starts with an empty environment, so you can see exactly what the environment files set up.
+
 ## Environment File Structure
 
-The editor works with mulle-sde's environment file structure:
+The editor works with [mulle-env](//github.com/mulle-sde/mulle-env)
+environment file structure:
 
 ```
 .mulle/etc/env/           # Local environment files
@@ -63,50 +92,9 @@ The editor works with mulle-sde's environment file structure:
 └── environment.sh
 ```
 
-## Development
-
-### Building from Source
-
-```bash
-# Install dependencies
-npm install
-
-# Run in development mode
-npm start
-
-# Build for current platform
-npm run build
-
-# Build for specific platforms
-npm run build-linux
-npm run build-mac
-npm run build-win
-```
-
-### Project Structure
-
-```
-mulle-environment-editor/
-├── main.js          # Main Electron process
-├── renderer.js      # Renderer process (UI logic)
-├── preload.js       # Preload script (IPC bridge)
-├── index.html       # Main UI layout
-├── styles.css       # UI styling
-└── package.json     # Dependencies and build config
-```
-
 ## License
 
 MIT License - see LICENSE file for details.
 
-## Contributing
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
-
-## Support
-
-For issues and feature requests, please use the [GitHub issue tracker](issues).
+![footer](https://www.mulle-kybernetik.com/pix/heartlessly-vibecoded.png)

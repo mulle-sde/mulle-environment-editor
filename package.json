@@ -1,6 +1,6 @@
 {
   "name": "mulle-environment-editor",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "🌵 GUI App to edit mulle-sourcetree config files",
   "main": "main.js",
   "scripts": {

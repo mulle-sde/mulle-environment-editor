@@ -169,15 +169,6 @@ async function createMenu()
             },
             { type: "separator" },
             {
-               label      : "Settings...",
-               accelerator: "CmdOrCtrl+,",
-               click      : () => 
-               {
-                  mainWindow.webContents.send("menu-settings");
-               }
-            },
-            { type: "separator" },
-            {
                label      : "Close Project",
                accelerator: "Esc",
                click      : () => 
@@ -198,6 +189,32 @@ async function createMenu()
             { role: "cut" },
             { role: "copy" },
             { role: "paste" },
+            ...(isMac ? [
+               { role: "pasteAndMatchStyle" },
+               { role: "delete" },
+               { role: "selectAll" },
+               { type: "separator" },
+               {
+                  label  : "Speech",
+                  submenu: [
+                     { role: "startSpeaking" },
+                     { role: "stopSpeaking" }
+                  ]
+               }
+            ] : [
+               { role: "delete" },
+               { type: "separator" },
+               { role: "selectAll" }
+            ]),
+            { type: "separator" },
+            {
+               label      : "Settings...",
+               accelerator: "CmdOrCtrl+,",
+               click      : () => 
+               {
+                  mainWindow.webContents.send("menu-settings");
+               }
+            }
             ...(isMac ? [
                { role: "pasteAndMatchStyle" },
                { role: "delete" },
