@@ -214,24 +214,7 @@ async function createMenu()
                {
                   mainWindow.webContents.send("menu-settings");
                }
-            }
-            ...(isMac ? [
-               { role: "pasteAndMatchStyle" },
-               { role: "delete" },
-               { role: "selectAll" },
-               { type: "separator" },
-               {
-                  label  : "Speech",
-                  submenu: [
-                     { role: "startSpeaking" },
-                     { role: "stopSpeaking" }
-                  ]
-               }
-            ] : [
-               { role: "delete" },
-               { type: "separator" },
-               { role: "selectAll" }
-            ]),
+            },
             { type: "separator" },
             {
                label      : "Add Variable",

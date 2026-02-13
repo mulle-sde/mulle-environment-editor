@@ -2,6 +2,9 @@
 
 A visual editor for mulle-sde environment files.
 
+![screeny](screeny.png)
+
+
 ## Features
 
 - **Visual Environment Editing**: Edit environment variables in a clean, modern interface
@@ -97,4 +100,4 @@ environment file structure:
 MIT License - see LICENSE file for details.
 
 
-![footer](https://www.mulle-kybernetik.com/pix/heartlessly-vibecoded.png)
+![footer](heartlessly-vibecoded.png)
