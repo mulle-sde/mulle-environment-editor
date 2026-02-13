@@ -34,6 +34,13 @@
   "build": {
     "appId": "com.mulle-kybernetik.environment-editor",
     "productName": "Mulle Environment Editor",
+    "publish": [
+      {
+        "provider": "github",
+        "releaseType": "release",
+        "vPrefixedTagName": false
+      }
+    ],
     "directories": {
       "output": "dist"
     },
