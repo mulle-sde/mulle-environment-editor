@@ -30,6 +30,24 @@ npm install
 npm start
 ```
 
+### Local Installation
+
+To install the CLI globally for local development:
+
+```bash
+# From the project directory
+npm link
+
+# Now you can run from anywhere
+mulle-environment-editor
+```
+
+To uninstall:
+
+```bash
+npm unlink -g mulle-environment-editor
+```
+
 ### Pre-built Binaries
 
 Download the latest release for your platform from the [releases page](releases).

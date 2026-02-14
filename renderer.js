@@ -274,6 +274,15 @@ async function init()
 {
    await loadRecentProjects();
    await loadSystemInfo();
+   
+   // Listen for project path from command line
+   window.electronAPI.onOpenProjectPath(async (event, projectPath) => {
+      try {
+         await openProject(projectPath);
+      } catch (error) {
+         console.error("Failed to open project from command line:", error);
+      }
+   });
 }
 
 async function loadSystemInfo() 
@@ -557,6 +566,7 @@ function renderVariables(skipSort = false)
         <input type="text" value="${escapeHtml(variable.key)}"
                ${variable.editable ? "" : "readonly"}
                onchange="updateVariable(${actualIndex}, 'key', this.value)"
+               onkeydown="if(event.key==='Enter'){this.blur()}"
                onfocus="selectVariable(${actualIndex})">
       </td>
       <td class="var-scope">
@@ -573,6 +583,7 @@ function renderVariables(skipSort = false)
                ${variable.editable ? "" : "readonly"}
                oninput="updateVariableLive(${actualIndex}, this.value)"
                onchange="updateVariable(${actualIndex}, 'value', this.value)"
+               onkeydown="if(event.key==='Enter'){this.blur()}"
                onfocus="selectVariable(${actualIndex})"
                title="${hasUnsafeValue ? "⚠️ Contains command substitution" : ""}">
         ${hasUnsafeValue ? '<span class="unsafe-indicator" title="Contains command substitution (backticks or $())">⚠️</span>' : ""}
@@ -1061,13 +1072,42 @@ function rebuildUnifiedVariables()
 // eslint-disable-next-line no-unused-vars
 function updateVariableLive(index, value) 
 {
+   console.log('updateVariableLive called:', index, value);
    const variable = currentEnvData.allVariables[index];
-   if (!variable) 
+   console.log('variable:', variable);
+   if (!variable || !variable.editable) 
    {
+      console.log('returning early - not editable or no variable');
       return;
    }
   
-   // Update preview in real-time without saving
+   // Validation
+   if (value.includes('"') || value.includes("\\")) 
+   {
+      console.log('validation failed - quotes or backslashes');
+      return; // Silently reject invalid values
+   }
+  
+   if (checkForUnsafeCommands(value)) 
+   {
+      // Allow but will show warning indicator
+   }
+  
+   // Update the actual variable value
+   variable.value = value;
+   const sourceData = currentEnvData[variable.scopeType][variable.scope];
+   if (sourceData) 
+   {
+      const sourceVar = sourceData.find(v => v.name === variable.key);
+      if (sourceVar) 
+      {
+         sourceVar.value = value;
+      }
+   }
+   setModified(true);
+  
+   // Update preview in real-time
+   console.log('updating preview:', previewRaw, value);
    previewRaw.textContent = value || "(empty)";
   
    // Debounced evaluation

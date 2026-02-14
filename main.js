@@ -6,6 +6,11 @@ const fsSync = require("fs");
 // Disable GPU acceleration to avoid GPU process errors
 app.disableHardwareAcceleration();
 
+// Suppress D-Bus errors on Linux
+if (process.platform === 'linux') {
+   app.commandLine.appendSwitch('disable-features', 'MediaSessionService');
+}
+
 let mainWindow;
 let currentProjectPath = "";
 
@@ -40,7 +45,8 @@ function createWindow()
       webPreferences: {
          preload         : path.join(__dirname, "preload.js"),
          contextIsolation: true,
-         nodeIntegration : false
+         nodeIntegration : false,
+         webSecurity     : false
       },
       show: false
    });
@@ -285,6 +291,24 @@ async function createMenu()
             ] : [
                { role: "close" }
             ])
+         ]
+      },
+      {
+         label  : "Help",
+         submenu: [
+            {
+               label: "About",
+               click: () => {
+                  const { dialog } = require("electron");
+                  const pkg = require("./package.json");
+                  dialog.showMessageBox(mainWindow, {
+                     type   : "info",
+                     title  : "About Mulle Environment Editor",
+                     message: `Mulle Environment Editor v${pkg.version}`,
+                     detail : `${pkg.description}\n\nhttps://github.com/mulle-sde/mulle-environment-editor\n\nLicense: ${pkg.license}`
+                  });
+               }
+            }
          ]
       }
    ];
@@ -930,7 +954,24 @@ function generateEnvironmentFile(variables)
    return content;
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+   createWindow();
+   
+   // Find arguments after '--' separator
+   const separatorIndex = process.argv.indexOf('--');
+   const projectPath = separatorIndex !== -1 && process.argv[separatorIndex + 1] 
+      ? process.argv[separatorIndex + 1] 
+      : null;
+   
+   if (projectPath && mainWindow) {
+      // Wait for renderer to be fully initialized
+      mainWindow.webContents.on('did-finish-load', () => {
+         setTimeout(() => {
+            mainWindow.webContents.send('open-project-path', projectPath);
+         }, 500);
+      });
+   }
+});
 
 app.on("window-all-closed", () => 
 {

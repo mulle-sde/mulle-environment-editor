@@ -27,6 +27,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
    onMenuAddScope      : (callback) => ipcRenderer.on("menu-add-scope", callback),
    onMenuToggleFilter  : (callback) => ipcRenderer.on("menu-toggle-filter", callback),
    onOpenRecentProject : (callback) => ipcRenderer.on("open-recent-project", callback),
+   onOpenProjectPath   : (callback) => ipcRenderer.on("open-project-path", callback),
 
    removeAllListeners: (channel) => ipcRenderer.removeAllListeners(channel)
 });
