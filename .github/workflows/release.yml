@@ -7,6 +7,10 @@ on:
     tags:
       - '*'        # any non-hierarchical tag, e.g. 0.0.1, v1, foo
 
+permissions:
+  contents: read
+  id-token: write
+
 jobs:
   build-linux:
     runs-on: ubuntu-latest
@@ -52,4 +56,5 @@ jobs:
     - uses: actions/setup-node@v4
       with:
         node-version: 'lts/*'
-    - run: npm publish
+        registry-url: 'https://registry.npmjs.org'
+    - run: npm publish --access public
