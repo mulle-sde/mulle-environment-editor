@@ -1,9 +1,12 @@
 name: Build and Release
 
 on:
+  release:
+    types: [published]
+
   push:
     tags:
-      - 'v*'
+      - '*'        # any non-hierarchical tag, e.g. 0.0.1, v1, foo
 
 jobs:
   build-linux:
