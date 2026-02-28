@@ -1,6 +1,6 @@
 {
   "name": "mulle-environment-editor",
-  "version": "0.0.9",
+  "version": "0.0.10",
   "description": "🏕️ GUI Editor for the mulle-sde environment",
   "main": "main.js",
   "bin": {

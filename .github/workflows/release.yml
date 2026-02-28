@@ -8,7 +8,7 @@ on:
       - '*'        # any non-hierarchical tag, e.g. 0.0.1, v1, foo
 
 permissions:
-  contents: read
+  contents: write
   id-token: write
 
 jobs:

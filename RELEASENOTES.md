@@ -1,4 +1,4 @@
-### 0.0.4 - 0.0.9
+### 0.0.4 - 0.0.10
 
 endless github workflow and npmjs tweaks
 
