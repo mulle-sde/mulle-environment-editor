@@ -2,7 +2,7 @@
 
 A visual editor for mulle-sde environment files.
 
-![screeny](screeny.png)
+![screeny](https://raw.githubusercontent.com/mulle-sde/mulle-environment-editor/master/screeny.png)
 
 
 ## Features
@@ -118,4 +118,4 @@ environment file structure:
 MIT License - see LICENSE file for details.
 
 
-![footer](heartlessly-vibecoded.png)
+![footer](https://raw.githubusercontent.com/mulle-sde/mulle-environment-editor/master/heartlessly-vibecoded.png)
